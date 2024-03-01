@@ -8,5 +8,8 @@ public class Main {
 
 /**
  * Interface to read file
+ * Write to DB or just insert statement
+ * Streaming - can handle big file effectively but what if file is corrupted?
+ *      - use transaction? abort on error
  *
  */
