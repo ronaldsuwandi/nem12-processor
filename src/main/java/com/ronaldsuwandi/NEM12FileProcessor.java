@@ -1,6 +1,5 @@
 package com.ronaldsuwandi;
 
-import com.ronaldsuwandi.record.IntervalDataRecord;
 import com.ronaldsuwandi.record.NMIDataDetailsRecord;
 
 import java.io.BufferedReader;
@@ -13,6 +12,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 public class NEM12FileProcessor {
+    NEM12ProcessorOutput processorOutput;
+
+    public NEM12FileProcessor(NEM12ProcessorOutput processorOutput) {
+        this.processorOutput = processorOutput;
+    }
+
     final int MinutesInDay = 24 * 60;
     class NEM12State {
         boolean has100;
@@ -107,16 +112,18 @@ public class NEM12FileProcessor {
         }
 
 
-        IntervalDataRecord record = new IntervalDataRecord(
-                LocalDate.parse(args[1], dateFormatter),
-                intervalRecords,
-                args[2 + intervalRecordLength],
-                reasonCode,
-                reasonDescription,
-                updateDateTime,
-                msatsLoadDateTime
-        );
+//        IntervalDataRecord record = new IntervalDataRecord(
+//                LocalDate.parse(args[1], dateFormatter),
+//                intervalRecords,
+//                args[2 + intervalRecordLength],
+//                reasonCode,
+//                reasonDescription,
+//                updateDateTime,
+//                msatsLoadDateTime
+//        );
 
+        LocalDate intervalDate = LocalDate.parse(args[1], dateFormatter);
+        processorOutput.write(state.dataDetailsRecord.nmi(), intervalDate, state.dataDetailsRecord.intervalLength(), intervalRecords);
         // TODO do we need to generate new record? can we reuse for memory optimisation
 //        System.out.println(record);
     }
@@ -135,10 +142,14 @@ public class NEM12FileProcessor {
     public void process(String path) throws NEM12Exception {
         try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
             String line;
+            // do validation first so it's a 2 pass thing
+            // 1st pass to confirm file is all good
+            // 2nd pass is for the actual processing and push to output to db
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 String[] split = line.split(",");
+
 
                 if (!isValidState(split[0])) {
                     // invalid state

@@ -57,7 +57,7 @@ function writeNEM12File(filename, nmiCount = 1000, days = 28) {
 
 // Specify the filename and parameters for the size of the file
 const filename = path.join(__dirname, 'large_nem12_file.csv');
-const nmiCount = 10000; // Number of NMIs to include
+const nmiCount = 1000; // Number of NMIs to include
 const days = 365; // Number of days of interval data for each NMI
 
 writeNEM12File(filename, nmiCount, days);
