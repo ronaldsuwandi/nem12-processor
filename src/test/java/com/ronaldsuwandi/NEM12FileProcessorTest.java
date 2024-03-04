@@ -1,31 +1,43 @@
 package com.ronaldsuwandi;
 
+import com.ronaldsuwandi.config.NEM12Config;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 
 import java.net.URL;
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 
 class NEM12FileProcessorTest {
 
     @Test
     void process() {
-        URL resourceUrl = getClass().getClassLoader().getResource("large_nem12_file.csv");
+//        URL resourceUrl = getClass().getClassLoader().getResource("large_nem12_file.csv");
+        URL resourceUrl = getClass().getClassLoader().getResource("nem12-example.csv");
 
 
-        String url = "jdbc:postgresql://localhost/postgres";
-        String user = "postgres";
-        String password = "postgres";
+        NEM12Config config = new NEM12Config(
+                10,
+                "jdbc:postgresql://localhost/postgres",
+                "postgres",
+                "postgres",
+                20
+        );
+        HikariConfig dbConfig = new HikariConfig();
+        dbConfig.setJdbcUrl(config.dbUri());
+        dbConfig.setUsername(config.dbUser());
+        dbConfig.setPassword(config.dbPassword());
+        dbConfig.setMaximumPoolSize(config.dbPoolSize());
 
-        try (Connection conn = DriverManager.getConnection(url, user, password)) {
-            NEM12ProcessorOutput output = new NEM12PostgresOutput(conn, 100);
+        try (HikariDataSource ds = new HikariDataSource(dbConfig)) {
+            NEM12ProcessorOutput output = new NEM12PostgresOutput(ds);
 
-            NEM12FileProcessor processor = new NEM12FileProcessor(output);
-            processor.process(resourceUrl.getFile());
+            NEM12FileProcessor processor = new NEM12FileProcessor(config, resourceUrl.getPath(), output);
+            processor.start();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        System.out.println("OEI");
     }
 
     @Test

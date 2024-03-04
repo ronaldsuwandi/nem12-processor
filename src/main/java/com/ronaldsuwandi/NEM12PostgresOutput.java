@@ -1,42 +1,44 @@
 package com.ronaldsuwandi;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class NEM12PostgresOutput implements NEM12ProcessorOutput {
+    private static final Logger logger = LoggerFactory.getLogger(NEM12FileProcessor.class);
+
     // DB connection
+    private final DataSource dataSource;
+    private final String insertSql = "INSERT INTO meter_readings (nmi, register_id, timestamp, consumption) VALUES (?, ?, ?, ?);";
 
-    private final int batchSize;
-    private final PreparedStatement pStatement;
-    private int batchCount = 0;
-
-    public NEM12PostgresOutput(Connection conn, int batchSize) throws SQLException {
-        this.batchSize = batchSize;
-        String sql = "INSERT INTO meter_readings (nmi, timestamp, consumption) VALUES (?, ?, ?);";
-        pStatement = conn.prepareStatement(sql);
+    public NEM12PostgresOutput(DataSource dataSource) throws SQLException {
+        this.dataSource = dataSource;
     }
 
-    public void write(String nmi, LocalDate date, int intervalLengthMinutes, double[] consumptions) {
+    public void write(OutputEntry output) {
         // batching + transaction
-        try {
-            pStatement.setString(1, nmi);
-            LocalDateTime start = date.atStartOfDay();
-            for (int i = 0; i < consumptions.length; i++) {
-                LocalDateTime timestamp = start.plusMinutes((long) i * intervalLengthMinutes);
-                pStatement.setTimestamp(2, Timestamp.valueOf(timestamp));
-                pStatement.setDouble(3, consumptions[i]);
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement pStatement = conn.prepareStatement(insertSql)) {
+
+            pStatement.setString(1, output.nmi());
+            pStatement.setString(2, output.registerId());
+            LocalDateTime start = output.date().atStartOfDay();
+            for (int i = 0; i < output.consumptions().length; i++) {
+                LocalDateTime timestamp = start.plusMinutes((long) i * output.intervalLengthMinutes());
+                pStatement.setTimestamp(3, Timestamp.valueOf(timestamp));
+                pStatement.setDouble(4, output.consumptions()[i]);
                 pStatement.addBatch();
-                batchCount++;
             }
-            if (batchCount % batchSize == 0) {
-                pStatement.executeBatch();
-                }
+            pStatement.executeBatch();
+
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            logger.error("SQL error", e);
         }
     }
 }

@@ -1,182 +1,310 @@
 package com.ronaldsuwandi;
 
+import com.ronaldsuwandi.config.NEM12Config;
+import com.ronaldsuwandi.record.IntervalDataRecord;
 import com.ronaldsuwandi.record.NMIDataDetailsRecord;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
+import java.util.concurrent.*;
 
-public class NEM12FileProcessor {
-    NEM12ProcessorOutput processorOutput;
+public class NEM12FileProcessor implements NEM12PostProcess {
+    private static final Logger logger = LoggerFactory.getLogger(NEM12FileProcessor.class);
+    private final NEM12ProcessorOutput processorOutput;
+    private final NEM12Config config;
+    private final String inputFile;
+    private final CSVFormat format = CSVFormat.DEFAULT;
+    public static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+    public static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private final ExecutorService executorService;
+    private final CountDownLatch latch;
 
-    public NEM12FileProcessor(NEM12ProcessorOutput processorOutput) {
+    private final BlockingQueue<NEM12ProcessorOutput.OutputEntry> queue = new LinkedBlockingQueue<>(10000);
+
+    public NEM12FileProcessor(NEM12Config config, String inputFile, NEM12ProcessorOutput processorOutput) {
+        Objects.requireNonNull(config);
+        Objects.requireNonNull(inputFile);
+        Objects.requireNonNull(processorOutput);
+        this.config = config;
+        this.inputFile = inputFile;
         this.processorOutput = processorOutput;
+        this.executorService = Executors.newFixedThreadPool(config.threads());
+        this.latch = new CountDownLatch(config.threads());
     }
 
-    final int MinutesInDay = 24 * 60;
-    class NEM12State {
+    public final static int MinutesInDay = 24 * 60;
+
+    static class NEM12State {
         boolean has100;
         boolean has900;
 
         NMIDataDetailsRecord dataDetailsRecord;
-
     }
 
     private NEM12State state = new NEM12State();
-    public boolean isValid(String path) {
-        try (RandomAccessFile file = new RandomAccessFile(path, "r")) {
-            var firstLine = file.readLine();
-            var validHeader = firstLine != null && firstLine.trim().startsWith("100");
-            int footerBuffer = 1024; // read last 1kb for additional buffer
-            byte[] footerByteBuffer = new byte[footerBuffer];
-            long seek = 0;
-            if (file.length() > footerBuffer) {
-                seek = file.length() - footerBuffer;
-            }
-            file.seek(seek);
-            file.read(footerByteBuffer, 0, footerBuffer);
-            String footer = new String(footerByteBuffer, StandardCharsets.UTF_8);
-            var validFooter = footer.trim().endsWith("900");
-            return validHeader && validFooter;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
 
-    final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-    final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-
-    boolean isValidState(String recordType) {
-        return switch (recordType) {
-            case "100" -> !state.has100 && !state.has900;
-            case "200", "900" -> state.has100 && !state.has900;
-            case "300", "400", "500" -> state.has100 && !state.has900 && state.dataDetailsRecord != null;
-            default -> throw new IllegalStateException("Unexpected value: " + recordType);
-        };
-    }
-    void process100(String... args) {
+    void process100(CSVRecord record) {
         state.has100 = true;
     }
 
-    void process200(String... args) {
+    void process200(CSVRecord record) {
 //        System.out.println(Arrays.toString(args));
 
         // FIXME better array length handling
         LocalDate nextScheduledReadDate = null;
-        if (args.length == 10) {
-            nextScheduledReadDate = LocalDate.parse(args[9], dateFormatter);
+        if (record.size() == 10) {
+            nextScheduledReadDate = LocalDate.parse(record.get(9), NEM12FileProcessor.dateFormatter);
         }
-        // validate args length
-
         state.dataDetailsRecord = new NMIDataDetailsRecord(
-                args[1], args[2], args[3], args[4], args[5], args[6], args[7], Integer.parseInt(args[8]), nextScheduledReadDate
+                record.get(1),
+                record.get(2),
+                record.get(3),
+                record.get(4),
+                record.get(5),
+                record.get(6),
+                record.get(7),
+                Integer.parseInt(record.get(8)),
+                nextScheduledReadDate
         );
     }
 
-    void process300(String... args) {
-//        System.out.println(Arrays.toString(args));
-        // validate args length
+    IntervalDataRecord process300(CSVRecord record) {
         int intervalRecordLength = MinutesInDay / state.dataDetailsRecord.intervalLength();
         double[] intervalRecords = new double[intervalRecordLength];
-        // FIXME validate length
-        for (int i=0;i<intervalRecordLength;i++) {
-            intervalRecords[i] = Double.parseDouble(args[i + 2]);
+        for (int i = 0; i < intervalRecordLength; i++) {
+            intervalRecords[i] = Double.parseDouble(record.get(i + 2));
         }
-
-        // records = 3
-        // 0 , 1date, 2r, 3r, 4r, 5
-
-
-        // FIXME tidy up for optional value
-        String reasonCode = null;
-        if (args.length == (2 + intervalRecordLength + 1 + 1)) {
-            reasonCode = args[2 + intervalRecordLength + 1];
-        }
-        String reasonDescription = null;
-        if (args.length == (2 + intervalRecordLength + 2 + 1)) {
-            reasonDescription = args[2 + intervalRecordLength + 2];
-        }
+        String qualityMethod = record.get(2 + intervalRecordLength);
+        String reasonCode = record.get(2 + intervalRecordLength + 1);
+        String reasonDescription = record.get(2 + intervalRecordLength + 2);
         LocalDateTime updateDateTime = null;
-        if (args.length == (2 + intervalRecordLength + 3 + 1)) {
-            updateDateTime = LocalDateTime.parse(args[2 + intervalRecordLength + 3], dateTimeFormatter);
+        {
+            String entry = record.get(2 + intervalRecordLength + 3);
+            if (!entry.isEmpty()) {
+                updateDateTime = LocalDateTime.parse(record.get(2 + intervalRecordLength + 3), dateTimeFormatter);
+            }
         }
         LocalDateTime msatsLoadDateTime = null;
-        if (args.length == (2 + intervalRecordLength + 4 + 1)) {
-            msatsLoadDateTime = LocalDateTime.parse(args[2 + intervalRecordLength + 4], dateTimeFormatter);
+        {
+            String entry = record.get(2 + intervalRecordLength + 4);
+            if (!entry.isEmpty()) {
+                msatsLoadDateTime = LocalDateTime.parse(record.get(2 + intervalRecordLength + 4), dateTimeFormatter);
+            }
         }
 
-
-//        IntervalDataRecord record = new IntervalDataRecord(
-//                LocalDate.parse(args[1], dateFormatter),
-//                intervalRecords,
-//                args[2 + intervalRecordLength],
-//                reasonCode,
-//                reasonDescription,
-//                updateDateTime,
-//                msatsLoadDateTime
-//        );
-
-        LocalDate intervalDate = LocalDate.parse(args[1], dateFormatter);
-        processorOutput.write(state.dataDetailsRecord.nmi(), intervalDate, state.dataDetailsRecord.intervalLength(), intervalRecords);
-        // TODO do we need to generate new record? can we reuse for memory optimisation
-//        System.out.println(record);
+        LocalDate intervalDate = LocalDate.parse(record.get(1), dateFormatter);
+        return new IntervalDataRecord(
+                intervalDate,
+                intervalRecords,
+                qualityMethod,
+                reasonCode,
+                reasonDescription,
+                updateDateTime,
+                msatsLoadDateTime
+        );
     }
 
-    void process400(String... args) {
+    void process400(CSVRecord record) {
     }
 
-    void process500(String... args) {
+    void process500(CSVRecord record) {
     }
 
-    void process900(String... args) {
+    void process900(CSVRecord record) {
         state.has900 = true;
-        System.out.println("DONE");
     }
 
-    public void process(String path) throws NEM12Exception {
-        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
-            String line;
-            // do validation first so it's a 2 pass thing
-            // 1st pass to confirm file is all good
-            // 2nd pass is for the actual processing and push to output to db
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty()) continue;
-                String[] split = line.split(",");
-
-
-                if (!isValidState(split[0])) {
-                    // invalid state
-                    throw new NEM12Exception();
-                }
-                switch (split[0]) {
-                    case "100" -> process100(split);
-                    case "200" -> process200(split);
-                    case "300" -> process300(split);
-                    case "400" -> process400(split);
-                    case "500" -> process500(split);
-                    case "900" -> process900(split);
-
-                    default -> throw new NEM12Exception();
-                }
-                // extract
-                // only 1 header
-                // when encounter 200
-                //  - if next is 300, process300(200details)
-                // - if next is 200, repeat
-                // only 1 footer
-                // Process each line as needed
-                // output type sql
-//                System.out.println(line); // Example: simply print each line
+    void process(CSVRecord record, NEM12PreProcess preProcess, NEM12PostProcess postProcess) throws NEM12Exception {
+        String recordType = record.get(0);
+        switch (recordType) {
+            case "100" -> {
+                preProcess.preProcess100(state, record);
+                process100(record);
+                postProcess.postProcess100(state);
             }
+            case "200" -> {
+                preProcess.preProcess200(state, record);
+                process200(record);
+                postProcess.postProcess200(state);
+            }
+            case "300" -> {
+                preProcess.preProcess300(state, record);
+                IntervalDataRecord intervalDataRecord = process300(record);
+                postProcess.postProcess300(state, intervalDataRecord);
+            }
+            case "400" -> {
+                preProcess.preProcess400(state, record);
+                process400(record);
+                postProcess.postProcess400(state);
+            }
+            case "500" -> {
+                preProcess.preProcess500(state, record);
+                process500(record);
+                postProcess.postProcess500(state);
+            }
+            case "900" -> {
+                preProcess.preProcess900(state, record);
+                process900(record);
+                postProcess.postProcess900(state);
+            }
+        }
+
+    }
+
+    private void startProducer() {
+        executorService.submit(() -> {
+            try (BufferedReader reader = Files.newBufferedReader(Path.of(inputFile));
+                 CSVParser parser = new CSVParser(reader, format)) {
+                NoopPrePostProcess noop = new NoopPrePostProcess();
+                for (CSVRecord record : parser) {
+                    process(record, noop, this);
+                }
+            } catch (FileNotFoundException e) {
+                throw new NEM12Exception("Input file not found", e);
+            } catch (IOException e) {
+                throw new NEM12Exception("IO exception when validating input file", e);
+            } finally {
+                try {
+                    queue.put(poisonPill);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
+                latch.countDown();
+            }
+        });
+    }
+
+    private void startConsumers() {
+        Runnable consumerTask = () -> {
+            try {
+                while (true) {
+                    NEM12ProcessorOutput.OutputEntry outputEntry = queue.take();
+                    if (outputEntry == poisonPill) {
+                        latch.countDown();
+                        queue.put(poisonPill); // so other thread will also listen
+                        logger.info("Consumer shutting down");
+                        break;
+                    }
+                    processorOutput.write(outputEntry);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                latch.countDown();
+            }
+        };
+
+        for (int i = 0; i < config.threads() - 1; i++) { // minus one to exclude producer thread
+            executorService.submit(consumerTask);
+        }
+    }
+
+
+    NEM12ProcessorOutput.OutputEntry poisonPill = new NEM12ProcessorOutput.OutputEntry(
+            "-",
+            "-",
+            LocalDate.ofEpochDay(0),
+            -1,
+            new double[]{}
+    );
+
+    void validateInputFile() throws NEM12Exception {
+        try (BufferedReader reader = Files.newBufferedReader(Path.of(inputFile));
+             CSVParser parser = new CSVParser(reader, format);
+        ) {
+            NEM12Validator validator = new NEM12Validator();
+            NoopPrePostProcess noop = new NoopPrePostProcess();
+            for (CSVRecord record : parser) {
+                process(record, validator, noop);
+            }
+        } catch (FileNotFoundException e) {
+            throw new NEM12Exception("Input file not found", e);
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new NEM12Exception("IO exception when validating input file", e);
+        }
+    }
+
+    @Override
+    public void postProcess100(NEM12State state) throws NEM12Exception {
+        // not yet required
+    }
+
+    @Override
+    public void postProcess200(NEM12State state) throws NEM12Exception {
+        // not yet required
+    }
+
+    @Override
+    public void postProcess300(NEM12State state, IntervalDataRecord intervalDataRecord) throws NEM12Exception {
+        // push to queue
+        try {
+            queue.put(new NEM12ProcessorOutput.OutputEntry(
+                    state.dataDetailsRecord.nmi(),
+                    state.dataDetailsRecord.registerId(),
+                    intervalDataRecord.intervalDate(),
+                    state.dataDetailsRecord.intervalLength(),
+                    intervalDataRecord.intervalValues()
+            ));
+        } catch (InterruptedException e) {
+            throw new NEM12Exception("Thread interrupted", e);
+        }
+    }
+
+    @Override
+    public void postProcess400(NEM12State state) throws NEM12Exception {
+        // not yet required
+    }
+
+    @Override
+    public void postProcess500(NEM12State state) throws NEM12Exception {
+        // not yet required
+    }
+
+    @Override
+    public void postProcess900(NEM12State state) throws NEM12Exception {
+        // not yet required
+    }
+
+
+    public void start() {
+        try (FileInputStream fis = new FileInputStream(this.inputFile);
+             FileChannel channel = fis.getChannel();
+             FileLock lock = channel.lock(0, Long.MAX_VALUE, true)) {
+
+            logger.debug("Latch count {}", latch.getCount());
+            // first pass
+            logger.info("Validating input file...");
+            validateInputFile();
+            logger.info("Input file validated. Processing...");
+            // second pass, actual processing
+            startProducer();
+            startConsumers();
+            logger.debug("Latch count {}", latch.getCount());
+            latch.await();
+
+        } catch (InterruptedException e) {
+            logger.error("Thread interrupted", e);
+        } catch (IOException e) {
+            logger.error("IO error", e);
+        } catch (NEM12Exception e) {
+            logger.error("Error processing file", e);
+        } finally {
+            executorService.shutdown();
         }
     }
 }

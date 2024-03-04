@@ -42,3 +42,18 @@ main
             e.printStackTrace();
         }
     }
+
+
+
+- logging done
+- code refactor
+- tests
+- build
+- diagram
+- flow
+- dependencies + reasoning
+- options for dealing invalid data
+- metrics?
+- config
+
+use lock for 2 pass
