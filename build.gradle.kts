@@ -12,8 +12,8 @@ repositories {
 
 dependencies {
     implementation("org.apache.commons:commons-configuration2:2.9.0")
+    implementation("commons-beanutils:commons-beanutils:1.9.4")
     implementation("org.apache.commons:commons-csv:1.10.0")
-
 
     // db related
     implementation("org.postgresql:postgresql:42.7.2")

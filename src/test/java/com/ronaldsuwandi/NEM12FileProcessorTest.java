@@ -37,7 +37,6 @@ class NEM12FileProcessorTest {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        System.out.println("OEI");
     }
 
     @Test

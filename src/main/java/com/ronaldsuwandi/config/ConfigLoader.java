@@ -14,7 +14,7 @@ public class ConfigLoader {
             return new NEM12Config(
                     config.getInt("threads"),
                     config.getString("database.uri"),
-                    config.getString("database.user"),
+                    config.getString("database.username"),
                     config.getString("database.password"),
                     config.getInt("database.poolSize")
             );

@@ -36,12 +36,13 @@ public class NEM12Validator implements NEM12PreProcess {
     @Override
     public void preProcess200(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
         validateState(state, record);
-        try {
-            if (record.size() == 10) {
+        String entry = record.get(9);
+        if (!entry.isEmpty()) {
+            try {
                 LocalDate.parse(record.get(9), NEM12FileProcessor.dateFormatter);
+            } catch (DateTimeParseException e) {
+                throw new NEM12Exception("Invalid date format", e);
             }
-        } catch (DateTimeParseException e) {
-            throw new NEM12Exception("Invalid date format", e);
         }
         if (record.size() < 9) {
             throw new NEM12Exception("Missing entry in 200 record. Record: " + record);
@@ -74,22 +75,26 @@ public class NEM12Validator implements NEM12PreProcess {
 
         // records = 3
         // 0 , 1date, 2value, 3value, 4value, 5, ...
-        try {
+        if (record.size() > (2 + intervalRecordLength + 3)){
             String entry = record.get(2 + intervalRecordLength + 3);
             if (!entry.isEmpty()) {
-                LocalDateTime.parse(record.get(2 + intervalRecordLength + 3), NEM12FileProcessor.dateTimeFormatter);
+                try {
+                    LocalDateTime.parse(record.get(2 + intervalRecordLength + 3), NEM12FileProcessor.dateTimeFormatter);
+                } catch (DateTimeParseException e) {
+                    throw new NEM12Exception("Invalid date format", e);
+                }
             }
-        } catch (DateTimeParseException e) {
-            throw new NEM12Exception("Invalid date format", e);
         }
 
-        try {
+        if (record.size() > (2 + intervalRecordLength + 4)) {
             String entry = record.get(2 + intervalRecordLength + 4);
             if (!entry.isEmpty()) {
-                LocalDateTime.parse(record.get(2 + intervalRecordLength + 4), NEM12FileProcessor.dateTimeFormatter);
+                try {
+                    LocalDateTime.parse(record.get(2 + intervalRecordLength + 4), NEM12FileProcessor.dateTimeFormatter);
+                } catch (DateTimeParseException e) {
+                    throw new NEM12Exception("Invalid date format", e);
+                }
             }
-        } catch (DateTimeParseException e) {
-            throw new NEM12Exception("Invalid date format", e);
         }
     }
 

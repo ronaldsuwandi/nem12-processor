@@ -3,6 +3,7 @@ package com.ronaldsuwandi;
 import com.ronaldsuwandi.config.ConfigLoader;
 import com.ronaldsuwandi.config.NEM12Config;
 import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,8 +39,8 @@ public class MainApp {
         dbConfig.setPassword(config.dbPassword());
         dbConfig.setMaximumPoolSize(config.dbPoolSize());
 
-        try {
-            NEM12ProcessorOutput processorOutput = new NEM12PostgresOutput(dbConfig.getDataSource());
+        try (HikariDataSource ds = new HikariDataSource(dbConfig)) {
+            NEM12ProcessorOutput processorOutput = new NEM12PostgresOutput(ds);
             NEM12FileProcessor processor = new NEM12FileProcessor(config, inputFile, processorOutput);
 
             long start = System.currentTimeMillis();

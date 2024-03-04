@@ -63,11 +63,9 @@ public class NEM12FileProcessor implements NEM12PostProcess {
     }
 
     void process200(CSVRecord record) {
-//        System.out.println(Arrays.toString(args));
-
-        // FIXME better array length handling
         LocalDate nextScheduledReadDate = null;
-        if (record.size() == 10) {
+        String entry = record.get(9);
+        if (!entry.isEmpty()) {
             nextScheduledReadDate = LocalDate.parse(record.get(9), NEM12FileProcessor.dateFormatter);
         }
         state.dataDetailsRecord = new NMIDataDetailsRecord(
@@ -93,14 +91,14 @@ public class NEM12FileProcessor implements NEM12PostProcess {
         String reasonCode = record.get(2 + intervalRecordLength + 1);
         String reasonDescription = record.get(2 + intervalRecordLength + 2);
         LocalDateTime updateDateTime = null;
-        {
+        if (record.size() > (2 + intervalRecordLength + 3)) {
             String entry = record.get(2 + intervalRecordLength + 3);
             if (!entry.isEmpty()) {
                 updateDateTime = LocalDateTime.parse(record.get(2 + intervalRecordLength + 3), dateTimeFormatter);
             }
         }
         LocalDateTime msatsLoadDateTime = null;
-        {
+        if (record.size() > (2 + intervalRecordLength + 4)) {
             String entry = record.get(2 + intervalRecordLength + 4);
             if (!entry.isEmpty()) {
                 msatsLoadDateTime = LocalDateTime.parse(record.get(2 + intervalRecordLength + 4), dateTimeFormatter);
@@ -251,7 +249,6 @@ public class NEM12FileProcessor implements NEM12PostProcess {
 
     @Override
     public void postProcess300(NEM12State state, IntervalDataRecord intervalDataRecord) throws NEM12Exception {
-        // push to queue
         try {
             queue.put(new NEM12ProcessorOutput.OutputEntry(
                     state.dataDetailsRecord.nmi(),
@@ -291,6 +288,9 @@ public class NEM12FileProcessor implements NEM12PostProcess {
             logger.info("Validating input file...");
             validateInputFile();
             logger.info("Input file validated. Processing...");
+            state.has100 = false;
+            state.has900 = false;
+            state.dataDetailsRecord = null;
             // second pass, actual processing
             startProducer();
             startConsumers();
