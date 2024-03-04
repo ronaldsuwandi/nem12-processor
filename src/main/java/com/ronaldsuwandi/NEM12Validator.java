@@ -60,7 +60,6 @@ public class NEM12Validator implements NEM12PreProcess {
         }
 
         int intervalRecordLength = NEM12FileProcessor.MinutesInDay / state.dataDetailsRecord.intervalLength();
-        // FIXME validate length
         if (record.size() < 2 + intervalRecordLength) {
             throw new NEM12Exception("Invalid record value for record type: " + record.get(0));
         }

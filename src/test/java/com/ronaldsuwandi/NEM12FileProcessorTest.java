@@ -11,10 +11,9 @@ import java.sql.SQLException;
 class NEM12FileProcessorTest {
 
     @Test
-    void process() {
+    void processE2E() {
 //        URL resourceUrl = getClass().getClassLoader().getResource("large_nem12_file.csv");
         URL resourceUrl = getClass().getClassLoader().getResource("nem12-example.csv");
-
 
         NEM12Config config = new NEM12Config(
                 10,

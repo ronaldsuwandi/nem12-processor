@@ -101,7 +101,8 @@ Pros:
 - no need for transaction
 
 Cons:
-- slightly slower - although not that much, reading 1GB input is pretty fast, less than few seconds
+- slightly slower - although not that much, reading 1GB input is pretty fast, 
+  less than few seconds
 - more resource usage
 - have to lock file to ensure data integrity
 
@@ -142,3 +143,7 @@ If we need to clear up the data the process will be painful and potentially heav
 on the database as well. Suppose we are using the same large file as described 
 in Option 2, and only the record from 16 millionth is invalid, then we'll need 
 to delete 16 million records from the database
+
+## Future works
+- Need to add monitoring (JMX/MBeans) 
+- Handle 400 and 500 records
