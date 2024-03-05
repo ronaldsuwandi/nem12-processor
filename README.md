@@ -16,7 +16,9 @@ The schema is slightly different from the assignment because there is a unique c
 so `register_id` is added as part of the column so that the meter reading can be more granular 
 
 ### Prerequisites
-Docker is optional but recommended
+- Minimum Java 17
+- Gradle 8.5
+- Docker is optional but recommended
 
 In order to run the application, you'll need an existing Postgres database. There is 
 `docker-compose.yml` file provided for the convenience. Simply run `docker compose up -d` 
@@ -64,6 +66,14 @@ The application is implemented using single producer and multiple consumers appr
 with LinkedBlockingQueue act as the queue in between. File is read using BufferedStream 
 approach so that it is memory efficient and no need to load the full file in memory
 
+Using the producer/consumer approach helps with the performance since consumers are run 
+concurrently
+
+When processing `src/test/resources/large_nem12_file.csv` using original non-concurrent 
+approach it took about 6minutes 35seconds and when running with the current approach 
+took about 4min 10seconds
+
+Flow:
 1. When application starts, it first obtain config and setup database connection pool
 2. It then perform 2-pass file loading while maintaining file lock. Where the 
    first pass it simply read the input file and verify if the record is all good
