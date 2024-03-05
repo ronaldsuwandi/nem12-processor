@@ -11,7 +11,7 @@ import java.time.format.DateTimeParseException;
 public class NEM12Validator implements NEM12PreProcess {
     private static final Logger logger = LoggerFactory.getLogger(NEM12Validator.class);
 
-    static void validateState(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
+    static void validateRecord(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
         if (record.size() == 0) {
             throw new NEM12Exception("Empty record");
         }
@@ -30,12 +30,12 @@ public class NEM12Validator implements NEM12PreProcess {
 
     @Override
     public void preProcess100(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
-        validateState(state, record);
+        validateRecord(state, record);
     }
 
     @Override
     public void preProcess200(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
-        validateState(state, record);
+        validateRecord(state, record);
         String entry = record.get(9);
         if (!entry.isEmpty()) {
             try {
@@ -51,7 +51,7 @@ public class NEM12Validator implements NEM12PreProcess {
 
     @Override
     public void preProcess300(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
-        validateState(state, record);
+        validateRecord(state, record);
 
         try {
             LocalDate.parse(record.get(1), NEM12FileProcessor.dateFormatter);
@@ -74,7 +74,7 @@ public class NEM12Validator implements NEM12PreProcess {
 
         // records = 3
         // 0 , 1date, 2value, 3value, 4value, 5, ...
-        if (record.size() > (2 + intervalRecordLength + 3)){
+        if (record.size() > (2 + intervalRecordLength + 3)) {
             String entry = record.get(2 + intervalRecordLength + 3);
             if (!entry.isEmpty()) {
                 try {
@@ -99,16 +99,16 @@ public class NEM12Validator implements NEM12PreProcess {
 
     @Override
     public void preProcess400(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
-        validateState(state, record);
+        validateRecord(state, record);
     }
 
     @Override
     public void preProcess500(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
-        validateState(state, record);
+        validateRecord(state, record);
     }
 
     @Override
     public void preProcess900(NEM12FileProcessor.NEM12State state, CSVRecord record) throws NEM12Exception {
-        validateState(state, record);
+        validateRecord(state, record);
     }
 }

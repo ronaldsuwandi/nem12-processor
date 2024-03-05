@@ -43,8 +43,9 @@ public class NEM12FileProcessor implements NEM12PostProcess {
         this.config = config;
         this.inputFile = inputFile;
         this.processorOutput = processorOutput;
-        this.executorService = Executors.newFixedThreadPool(config.threads());
-        this.latch = new CountDownLatch(config.threads());
+        // add 1 thread for producer
+        this.executorService = Executors.newFixedThreadPool(config.consumerThreads() + 1);
+        this.latch = new CountDownLatch(config.consumerThreads() + 1);
     }
 
     public final static int MinutesInDay = 24 * 60;
@@ -207,11 +208,10 @@ public class NEM12FileProcessor implements NEM12PostProcess {
             }
         };
 
-        for (int i = 0; i < config.threads() - 1; i++) { // minus one to exclude producer thread
+        for (int i = 0; i < config.consumerThreads(); i++) {
             executorService.submit(consumerTask);
         }
     }
-
 
     NEM12ProcessorOutput.OutputEntry poisonPill = new NEM12ProcessorOutput.OutputEntry(
             "-",
@@ -221,6 +221,10 @@ public class NEM12FileProcessor implements NEM12PostProcess {
             new double[]{}
     );
 
+    boolean isValidFinalState() {
+        return state.has100 && state.has900;
+    }
+
     void validateInputFile() throws NEM12Exception {
         try (BufferedReader reader = Files.newBufferedReader(Path.of(inputFile));
              CSVParser parser = new CSVParser(reader, format);
@@ -229,6 +233,9 @@ public class NEM12FileProcessor implements NEM12PostProcess {
             NoopPrePostProcess noop = new NoopPrePostProcess();
             for (CSVRecord record : parser) {
                 process(record, validator, noop);
+            }
+            if (!isValidFinalState()) {
+                throw new NEM12Exception("Input has missing 100 or 900 record");
             }
         } catch (FileNotFoundException e) {
             throw new NEM12Exception("Input file not found", e);
@@ -277,6 +284,11 @@ public class NEM12FileProcessor implements NEM12PostProcess {
         // not yet required
     }
 
+    private void clearState() {
+        state.has100 = false;
+        state.has900 = false;
+        state.dataDetailsRecord = null;
+    }
 
     public void start() {
         try (FileInputStream fis = new FileInputStream(this.inputFile);
@@ -288,9 +300,7 @@ public class NEM12FileProcessor implements NEM12PostProcess {
             logger.info("Validating input file...");
             validateInputFile();
             logger.info("Input file validated. Processing...");
-            state.has100 = false;
-            state.has900 = false;
-            state.dataDetailsRecord = null;
+            clearState();
             // second pass, actual processing
             startProducer();
             startConsumers();
@@ -298,11 +308,11 @@ public class NEM12FileProcessor implements NEM12PostProcess {
             latch.await();
 
         } catch (InterruptedException e) {
-            logger.error("Thread interrupted", e);
+            throw new NEM12Exception("Thread interrupted", e);
         } catch (IOException e) {
-            logger.error("IO error", e);
+            throw new NEM12Exception("IO error", e);
         } catch (NEM12Exception e) {
-            logger.error("Error processing file", e);
+            throw new NEM12Exception("Error processing file", e);
         } finally {
             executorService.shutdown();
         }

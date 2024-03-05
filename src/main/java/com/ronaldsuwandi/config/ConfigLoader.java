@@ -12,7 +12,7 @@ public class ConfigLoader {
         try {
             Configuration config = configs.properties(url);
             return new NEM12Config(
-                    config.getInt("threads"),
+                    config.getInt("consumerThreads"),
                     config.getString("database.uri"),
                     config.getString("database.username"),
                     config.getString("database.password"),

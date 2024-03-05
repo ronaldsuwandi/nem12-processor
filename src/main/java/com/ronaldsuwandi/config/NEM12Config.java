@@ -3,14 +3,14 @@ package com.ronaldsuwandi.config;
 import java.util.Objects;
 
 public record NEM12Config(
-        int threads,
+        int consumerThreads,
         String dbUri,
         String dbUser,
         String dbPassword,
         int dbPoolSize
 ) {
     public NEM12Config {
-        if (threads <= 0) {
+        if (consumerThreads <= 0) {
             throw new RuntimeException("Invalid config. threads must be positive number");
         }
         if (dbPoolSize <= 0) {
