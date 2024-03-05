@@ -3,6 +3,12 @@
 The aim for this project is to read nem12 file and write the output into database. More details 
 is within `doc` directory - it contains both the assignment and the nem12 standard
 
+Memory usage is pretty stable (no memory leak). Screenshot is showing the memory usage when 
+processing `src/test/resources/large_nem12_file.csv` (90MB file with 360k rows that outputs 
+17million db write calls)
+
+![memory](doc/memory.png)
+
 ### Schema
 Database schema is stored in `sql/schema.sql` which is automatically run when docker is created. 
 
@@ -55,7 +61,8 @@ it's out of scope
 
 ## Architecture
 The application is implemented using single producer and multiple consumers approach
-with LinkedBlockingQueue act as the queue in between
+with LinkedBlockingQueue act as the queue in between. File is read using BufferedStream 
+approach so that it is memory efficient and no need to load the full file in memory
 
 1. When application starts, it first obtain config and setup database connection pool
 2. It then perform 2-pass file loading while maintaining file lock. Where the 
