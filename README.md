@@ -70,8 +70,8 @@ Using the producer/consumer approach helps with the performance since consumers 
 concurrently
 
 When processing `src/test/resources/large_nem12_file.csv` using original non-concurrent 
-approach it took about 6minutes 35seconds and when running with the current approach 
-took about 4min 10seconds
+approach it took about **6minutes 35seconds** and when running with the current approach 
+took about **4minutes 10seconds**
 
 Flow:
 1. When application starts, it first obtain config and setup database connection pool
