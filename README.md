@@ -106,7 +106,8 @@ postProcess.postProcessXXX(state);
   `NEM12ProcessorOutput` and the job is to write to database
 
 ## Decisions
-Before deciding on the current approach, I had 3 options to implement this project
+Before deciding on the current approach, I had 3 options to implement this project. I settled 
+on uing Option 1 after comparing the tradeoffs with the other options
 
 ### Option 1: Validate the whole file and process them only if all good
 This will be a 2 pass approach, first pass is just to read and process all the 
